@@ -1,0 +1,16 @@
+{
+  "name": "cmdtop",
+  "owner": {
+    "name": "Leo"
+  },
+  "plugins": [
+    {
+      "name": "cmdtop",
+      "source": "./",
+      "description": "统计 Claude Code 斜杠命令使用排行"
+    }
+  ],
+  "metadata": {
+    "description": "统计 Claude Code 斜杠命令使用排行的 skill"
+  }
+}

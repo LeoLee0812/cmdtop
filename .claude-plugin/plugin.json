@@ -1,0 +1,8 @@
+{
+  "name": "cmdtop",
+  "version": "0.1.0",
+  "description": "统计你在 Claude Code 里最常用的斜杠命令，输出 Top 排行榜",
+  "author": { "name": "Leo", "url": "https://github.com/LeoLee0812" },
+  "repository": "https://github.com/LeoLee0812/cmdtop",
+  "license": "MIT"
+}
