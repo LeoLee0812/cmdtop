@@ -53,6 +53,7 @@ cp -r cmdtop/skills/cmdtop ~/.claude/skills/
 | `/cmdtop --builtin` | 只看内置命令，不算 skill / 插件 |
 | `/cmdtop -p my-project` | 只看某个项目 |
 | `/cmdtop --json` | 输出 JSON |
+| `/cmdtop --no-archive` | 不读写归档，只看当前 history.jsonl |
 
 也可以直接说"我这周最常用哪些命令"，Claude 会自动调用。
 
@@ -71,6 +72,18 @@ Claude Code 会把你每次回车的输入记在 `~/.claude/history.jsonl` 里�
 3. **计数排序**：输出 Top N，`/model`、`/effort` 这种带选项的命令顺带统计你最常切到哪个参数
 
 匹配不上任何已知命令的会单独列在"未识别"里，一般是卸掉的 skill。
+
+## 历史会不会过期
+
+会。Claude Code 默认只保留 30 天会话记录（`cleanupPeriodDays`），新版本也会按这个天数裁剪 `history.jsonl`。
+
+所以 cmdtop 每次运行都会把新记录并入自己的归档 `~/.claude/cmdtop/archive.jsonl`，统计时把归档和当前历史合并去重。原文件被裁掉后，旧记录还在归档里。归档只存时间、项目和命令本身，普通对话的正文一律不存。
+
+想让 Claude Code 自己多留一阵，可以在 `~/.claude/settings.json` 里加：
+
+```json
+{ "cleanupPeriodDays": 3650 }
+```
 
 ## 隐私
 

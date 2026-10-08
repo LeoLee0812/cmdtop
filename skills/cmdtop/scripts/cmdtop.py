@@ -3,6 +3,7 @@
 
 数据来源是 Claude Code 自己记下的输入历史 ~/.claude/history.jsonl，
 每敲一次回车就会追加一行 {"display": "...", "timestamp": ..., "project": ...}。
+这个文件会被 Claude Code 按 cleanupPeriodDays 裁剪，所以每次运行都会顺手归档一份。
 纯标准库，无任何依赖，数据只在本地读，不上传。
 """
 import argparse
@@ -16,6 +17,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 CLAUDE_DIR = Path(os.environ.get("CLAUDE_CONFIG_DIR", Path.home() / ".claude"))
+ARCHIVE = CLAUDE_DIR / "cmdtop" / "archive.jsonl"
 
 # Claude Code 内置斜杠命令（含历代版本出现过的，旧命令留着不影响统计）
 BUILTIN = {
@@ -66,24 +68,53 @@ def scan_skills(projects):
     return names
 
 
-def load(days, project):
-    path = CLAUDE_DIR / "history.jsonl"
+def read_jsonl(path):
     if not path.exists():
-        sys.exit(f"找不到 {path}，确认装过并用过 Claude Code")
-    since = (time.time() - days * 86400) * 1000 if days else 0
-    rows = []
+        return []
+    out = []
     with open(path, encoding="utf-8", errors="ignore") as f:
         for line in f:
             try:
-                d = json.loads(line)
+                out.append(json.loads(line))
             except ValueError:
                 continue
-            if d.get("timestamp", 0) < since:
-                continue
-            if project and project not in d.get("project", ""):
-                continue
-            rows.append(d)
-    return rows
+    return out
+
+
+def slim(d):
+    """归档只留统计要用的字段：普通输入清空正文，斜杠命令只留第一行前 60 字。"""
+    text = d.get("display", "").strip()
+    text = text.split("\n", 1)[0][:60] if text.startswith("/") else ""
+    return {"display": text, "timestamp": d.get("timestamp", 0),
+            "project": d.get("project", ""), "sessionId": d.get("sessionId", "")}
+
+
+def sync_archive():
+    """新版 Claude Code 会按 cleanupPeriodDays（默认 30 天）裁剪 history.jsonl，
+    所以每次运行都把新记录并入 cmdtop 自己的归档，旧数据被裁掉也还在。"""
+    live = read_jsonl(CLAUDE_DIR / "history.jsonl")
+    archive = read_jsonl(ARCHIVE)
+    key = lambda d: (d.get("timestamp", 0), d.get("sessionId", ""))
+    seen = {key(d) for d in archive}
+    fresh = [slim(d) for d in live if key(d) not in seen]
+    if fresh:
+        try:
+            ARCHIVE.parent.mkdir(parents=True, exist_ok=True)
+            with open(ARCHIVE, "a", encoding="utf-8") as f:
+                for d in fresh:
+                    f.write(json.dumps(d, ensure_ascii=False) + "\n")
+        except OSError:
+            pass  # 写不了归档不影响本次统计
+    if not live and not archive:
+        sys.exit(f"找不到 {CLAUDE_DIR / 'history.jsonl'}，确认装过并用过 Claude Code")
+    return archive + fresh
+
+
+def load(days, project, no_archive=False):
+    rows = [slim(d) for d in read_jsonl(CLAUDE_DIR / "history.jsonl")] if no_archive else sync_archive()
+    since = (time.time() - days * 86400) * 1000 if days else 0
+    return [d for d in rows
+            if d["timestamp"] >= since and (not project or project in d["project"])]
 
 
 def bar(n, top, width=24):
@@ -96,10 +127,11 @@ def main():
     ap.add_argument("-d", "--days", type=int, default=0, help="只看最近 N 天（默认全部）")
     ap.add_argument("-p", "--project", default="", help="只看路径包含该字符串的项目")
     ap.add_argument("--builtin", action="store_true", help="只看内置命令，不含 skill")
+    ap.add_argument("--no-archive", action="store_true", help="不读写归档，只看当前 history.jsonl")
     ap.add_argument("--json", action="store_true", help="输出 JSON")
     a = ap.parse_args()
 
-    rows = load(a.days, a.project)
+    rows = load(a.days, a.project, a.no_archive)
     skills = scan_skills({r.get("project", "") for r in rows if r.get("project")})
 
     hits, args_of, unknown = Counter(), defaultdict(Counter), Counter()
